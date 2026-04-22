@@ -1,6 +1,6 @@
 # 🤖 AI Auto Form Filler
 
-> Extract structured data from documents using **Google Document AI** (free tier) and auto-fill web forms — with editing, export, and history.
+> Extract structured data from documents using **Google Document AI**. Upload any document — resume, government form, ID and let AI automatically extract and fill in all form fields for you.
 
 ---
 
@@ -22,31 +22,117 @@
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture - The system uses a two-stage extraction pipeline powered by Google Document AI:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Browser (Angular 17)                 │
-│  Upload → AI Review → Edit Form → Save → Export         │
-└────────────────────┬────────────────────────────────────┘
-                     │ HTTP  /api/*
-┌────────────────────▼────────────────────────────────────┐
-│                  nginx (port 80)                         │
-│  Static files  +  Reverse proxy → backend:8000          │
-└────────────────────┬────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────┐
-│              FastAPI (Python 3.12)                       │
-│  ┌──────────┐  ┌──────────────────┐  ┌───────────────┐  │
-│  │  Routes  │→ │ Google DocAI Svc │→ │ Google Cloud  │  │
-│  │  (API)   │  │  (form_parser)   │  │  Document AI  │  │
-│  └──────────┘  └──────────────────┘  └───────────────┘  │
-│                ┌──────────────┐                         │
-│                │  PostgreSQL  │                         │
-│                └──────────────┘                         │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        USER UPLOADS DOCUMENT                    │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              GOOGLE DOCUMENT AI  (OCR + Custom Extractor)       │
+│                                                                 │
+│   Processor: AI-resumeform (Custom Extractor)                   │
+│   Model:     pretrained-foundation-model (auto-upgraded)        │
+│                                                                 │
+│   Extracts structured schema fields:                            │
+│   ┌─────────────────┐  ┌──────────────────┐  ┌─────────────┐    │
+│   │ personal_info   │  │ work_experience  │  │  education  │    │
+│   │ ├ full_name     │  │ ├ job_title      │  │ ├ degree    │    │
+│   │ ├ email_address │  │ ├ company        │  │ ├ school    │    │
+│   │ ├ contact_number│  │ └ dates          │  │ └ grad_year │    │
+│   │ ├ city          │  └──────────────────┘  └─────────────┘    │
+│   │ └ country       │  ┌──────────────────┐  ┌─────────────┐    │
+│   └─────────────────┘  │     skills       │  │   project   │    │
+│                        │ ├ soft_skills    │  │ ├ proj_name │    │
+│                        │ ├ technical      │  │ ├ desc      │    │
+│                        │ └ tools          │  │ └ tech_used │    │
+│                        └──────────────────┘  └─────────────┘    │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+               ┌─────────────┴──────────────┐
+               │                            │
+               ▼                            ▼
+   ┌───────────────────────┐   ┌────────────────────────────┐
+   │  Structured fields    │   │  No fields found           │
+   │  found (forms, IDs)   │   │  (free-text documents)     │
+   │                       │   │                            │
+   │  Stage 1 results used │   │  Falls through to Stage 2  │
+   └───────────┬───────────┘   └────────────┬───────────────┘
+               │                            │
+               │                            ▼
+               │               ┌────────────────────────────┐
+               │               │   STAGE 2: CUSTOM NLP      │
+               │               │   PARSER (regex + heuristic│
+               │               │                            │
+               │               │  Extracts from raw OCR:    │
+               │               │  • Name (first-line + label│
+               │               │  • Email, Phone, LinkedIn  │
+               │               │  • Address (street keywords│
+               │               │  • DOB, expiry dates       │
+               │               │  • SSS, TIN, PhilHealth    │
+               │               │  • Passport, Pag-IBIG      │
+               │               │  • Job title, Employer     │
+               │               │  • Degree, School          │
+               │               │  • Skills (section + scan) │
+               └───────────────┴────────────────────────────┘
+                             │
+                             │  Gap-fill: NLP adds any fields
+                             │  missed by the form parser
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     MERGED RESULT                               │
+│         Deduplicated · Highest confidence wins                  │
+│         Mapped to frontend form fields                          │
+└─────────────────────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│               USER REVIEWS & EDITS IN BROWSER                   │
+│           Confidence badges: 🟢 High  🟡 Medium  🔴 Low        
+└─────────────────────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    EXPORT  (PDF or JSON)                        │
+│               Saved to per-user submission history              │
+└─────────────────────────────────────────────────────────────────┘
 ```
-
+## 🛠️ Tech Stack
+ 
+### Backend
+| Technology | Version | Purpose |
+|---|---|---|
+| **Python** | 3.12 | Runtime |
+| **FastAPI** | 0.111 | REST API framework |
+| **Uvicorn** | 0.29 | ASGI server |
+| **SQLAlchemy** | 2.0 | Async ORM |
+| **asyncpg** | 0.29 | Async PostgreSQL driver |
+| **Pydantic v2** | 2.7 | Data validation & settings |
+| **python-jose** | 3.3 | JWT token generation |
+| **passlib + bcrypt** | 1.7 / 4.0 | Password hashing |
+| **ReportLab** | 4.1 | PDF export generation |
+| **google-cloud-documentai** | 2.29 | Google Document AI SDK |
+| **google-auth** | 2.29 | GCP Application Default Credentials |
+ 
+### Frontend
+| Technology | Version | Purpose |
+|---|---|---|
+| **Angular** | 17 | SPA framework |
+| **TypeScript** | 5.4 | Language |
+| **Tailwind CSS** | 3.4 | Utility-first styling |
+| **RxJS** | 7.8 | Reactive data streams |
+| **nginx** | 1.25 | Production static file server + API proxy |
+ 
+### Infrastructure
+| Technology | Purpose |
+|---|---|
+| **Docker + Docker Compose** | Containerization & orchestration |
+| **PostgreSQL 16** | Persistent data store |
+| **Google Document AI** | OCR + Custom Extractor AI processor |
+| **Google Cloud ADC** | Credential management (no service account key files) |
 ---
 
 ## 🚀 Quick Start
@@ -122,65 +208,5 @@ ai-form-filler/
 └── README.md
 ```
 
----
 
-## 🧑‍💻 Local Development (without Docker)
 
-### Backend
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # fill in GCP values or leave blank for mock mode
-
-uvicorn app.main:app --reload --port 8000
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm start   # http://localhost:4200
-```
-
----
-
-## 🔒 Security Notes
-
-- GCP service-account JSON is **gitignored** — never commit it
-- The `credentials/` directory is mounted **read-only** into Docker
-- Passwords hashed with **bcrypt** (work factor 12)
-- JWTs expire after **8 hours** (configurable)
-- Each user can only access their own documents and submissions
-
----
-
-## 🧩 Extending the System
-
-### Add a new form field
-
-1. `backend/app/services/form/mapping_service.py` → add to `FORM_SCHEMA`
-2. Add Google DocAI entity type aliases to `FIELD_ALIASES`
-3. Frontend re-renders dynamically — no Angular changes needed
-
-### Switch to a specialised processor
-
-Google Document AI offers specialised processors for higher accuracy:
-
-| Processor | Best for | Free? |
-|-----------|----------|-------|
-| Form Parser | General forms | ✅ Yes |
-| Document OCR | Raw text extraction | ✅ Yes |
-| ID Document Parser | Passports, driver licenses | ⚠️ Paid |
-| Invoice Parser | Invoices, receipts | ⚠️ Paid |
-
-To switch: update `GOOGLE_DOCUMENTAI_PROCESSOR_ID` in `.env` — no code changes.
-
----
-
-## 📄 License
-
-MIT — free to use, modify, and deploy.
