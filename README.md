@@ -98,53 +98,6 @@ docker compose up --build
 
 ---
 
-## ☁️ Google Document AI Setup (Free Tier)
-
-### Step 1 — Create a GCP project
-1. Go to https://console.cloud.google.com/projectcreate
-2. Give it any name, note the **Project Number** (an integer like `123456789012`)
-
-### Step 2 — Enable the Document AI API
-```
-https://console.cloud.google.com/apis/library/documentai.googleapis.com
-```
-Click **Enable**.
-
-### Step 3 — Create a Form Parser processor
-1. Go to https://console.cloud.google.com/ai/document-ai/processors
-2. Click **Create Processor**
-3. Search for and select **Form Parser** (this is the free-tier processor)
-4. Choose region `us` or `eu`, give it a name, click **Create**
-5. Copy the **Processor ID** from the details page (e.g. `abc1234567890def`)
-
-### Step 4 — Create a service-account key
-1. Go to https://console.cloud.google.com/iam-admin/serviceaccounts
-2. Click **Create Service Account**
-3. Name it anything (e.g. `formfiller-sa`), click **Create and Continue**
-4. Grant the role **Document AI API User**, click **Done**
-5. Click on the service account → **Keys** tab → **Add Key** → **JSON**
-6. Save the downloaded file as `backend/credentials/gcp-service-account.json`
-
-### Step 5 — Fill in `.env`
-
-```env
-GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-service-account.json
-GOOGLE_CLOUD_PROJECT_ID=123456789012        # your project NUMBER
-GOOGLE_CLOUD_LOCATION=us
-GOOGLE_DOCUMENTAI_PROCESSOR_ID=abc1234567890def
-```
-
-### Free tier limits
-
-| Resource | Free quota |
-|----------|-----------|
-| Form Parser pages | 1,000 / month |
-| Regions | us, eu |
-| File types | PDF, JPEG, PNG, TIFF, BMP, GIF, WebP |
-| Max file size | 20 MB (our backend limit) |
-
----
-
 ## 📁 Project Structure
 
 ```
