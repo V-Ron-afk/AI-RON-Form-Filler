@@ -4,24 +4,6 @@
 
 ---
 
-## ✨ Features
-
-| Feature | Detail |
-|---------|--------|
-| 📄 Document Upload | PDF, JPG, PNG, TIFF, WebP — drag & drop or click |
-| 🤖 AI Extraction | Google Document AI — Form Parser processor |
-| 🆓 Free Tier | 1,000 pages/month — no credit card required |
-| 🎯 Smart Mapping | 30+ field aliases mapped to canonical form fields |
-| 🟢 Confidence Scores | Per-field colour-coded UI (green/amber/red/grey) |
-| ✏️ Editable Form | Full edit-before-submit capability |
-| 💾 Persistence | PostgreSQL — all documents & submissions saved |
-| 📦 Export | Download as JSON or formatted PDF |
-| 📜 History | Browse past documents & submissions |
-| 🔐 JWT Auth | Secure register / login with bcrypt passwords |
-| 🐳 Docker | One-command full-stack startup |
-
----
-
 ## 🏗️ Architecture - The system uses a two-stage extraction pipeline powered by Google Document AI:
 
 ```
