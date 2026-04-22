@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# AI Form Filler — Docker Compose
+#
+# Services:
+#   db        PostgreSQL 16
+#   backend   FastAPI (Python)
+#   frontend  Angular → nginx
+#
+# Usage:
+#   1. gcloud auth application-default login   (one-time, on your machine)
+#   2. cp backend/.env.example backend/.env    (fill in GCP project/processor IDs)
+#   3. docker compose up --build
+#
+# Then open: http://localhost
+# API docs:  http://localhost/api/docs
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: formfiller_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       formfiller
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # ports:
+      #   - "5432:5432"        # uncomment ONLY if you need external DB tool access (TablePlus, DBeaver, etc.)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d formfiller"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: formfiller_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override DB URL to use Docker service name
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/formfiller
+      # Point SDK directly to the ADC file — avoids $HOME resolution issues
+      GOOGLE_APPLICATION_CREDENTIALS: /home/appuser/.config/gcloud/application_default_credentials.json
+    volumes:
+      # Persist uploads between container restarts
+      - uploads_data:/tmp/uploads
+      - exports_data:/tmp/exports
+      # ADC auth — mount your gcloud login token (run: gcloud auth application-default login first)
+      # Linux / macOS:
+      # - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+      # Windows (hardcoded path — $APPDATA does not expand in Docker Compose):
+      - C:/Users/Naven Oblepias/AppData/Roaming/gcloud:/home/appuser/.config/gcloud:ro
+    ports:
+      - "8000:8000"          # expose for direct API access during development
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Angular Frontend (nginx) ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: formfiller_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"              # main entry point
+    depends_on:
+      - backend
+
+
+volumes:
+  postgres_data:
+  uploads_data:
+  exports_data:
