@@ -1,4 +1,4 @@
-# 🤖 AI Auto Form Filler
+# 🤖 DocuFill AI  ·  Personal Project
 
 > Extract structured data from documents using **Google Document AI**. Upload any document resume, government form, ID and let AI automatically extract and fill in all form fields for you.
 
